@@ -103,8 +103,8 @@ class GUICore:
         self.entry_var3.set(self.OUTPUT_FILENAME)
 
         # A hint saying extention will be PDF.
-        self.lbl5 = Label(self.root, text='.pdf', font=('Ubuntu, 10'))
-        self.lbl5.place(x=525, y=115)
+        self.output_ext_label = Label(self.root, text='.pdf', font=('Ubuntu, 10'))
+        self.output_ext_label.place(x=525, y=150)
 
         # For browsing path to folder.
         self.btn1 = Button(self.root, text='Browse', font=('Ubuntu, 9'), width=11)
@@ -172,8 +172,10 @@ class GUICore:
         self.entr4.place(x=250, y=240, width=45, height=25)
 
         # Add frame for metadata/TOC options
-        self.meta_frame = LabelFrame(self.root, text='TOC Options', relief='solid', bd='0.5')
+        self.meta_frame = LabelFrame(self.root, text='Merge mode', relief='solid', bd='0.5')
         self.meta_frame.place(x=40, y=85, width=625, height=55)
+        self.lbl4.place(x=40, y=150)
+        self.entr3.place(x=150, y=150, width=370, height=25)
 
         # Add radio buttons for TOC options
         self.toc_var = StringVar()
@@ -191,22 +193,31 @@ class GUICore:
 
         self.rb_use_meta = Radiobutton(
             self.meta_frame,
-            text='Use TLF Metadata',
+            text='Metadata + TOC',
             variable=self.toc_var,
             value='use_meta',
             command=self.update_toc_controls,
             font=('Ubuntu, 9')
         )
-        self.rb_use_meta.place(x=200, y=5)
+        self.rb_use_meta.place(x=380, y=5)
+
+        self.rb_pdf_names = Radiobutton(
+            self.meta_frame,
+            text='Filename + TOC',
+            variable=self.toc_var,
+            value='pdf_names',
+            command=self.update_toc_controls,
+            font=('Ubuntu, 9')
+        )
+        self.rb_pdf_names.place(x=200, y=5)
 
         # Add template button
         self.btn_template = Button(
-            self.meta_frame,
-            text='Create Metadata Using Template',
+            self.root,
+            text='Create Metadata Template',
             command=self.open_metadata_template,
             font=('Ubuntu, 9')
         )
-        self.btn_template.place(x=380, y=5)
 
         # Move existing metadata controls
         self.lbl3.place_forget()  # Hide original metadata label
@@ -256,55 +267,27 @@ class GUICore:
 
     def update_toc_controls(self):
         """Update GUI controls based on TOC selection"""
-        if self.toc_var.get() == 'no_toc':
-            # Hide all TOC and metadata-related controls
-            self.lbl3.place_forget()  # TLF Metadata label
-            self.entr2.place_forget()  # TLF Metadata entry
-            self.btn2.place_forget()  # TLF Metadata browse button
-            self.locationBox.place_forget()  # Font selection combobox
-            self.lbl7.place_forget()  # Use font for TOC label
-            self.frm1.place_forget()  # Bookmark options frame
-            self.entry_var2.set('')  # Clear metadata path
-
-            # Hide Additional Bookmark Options
-            self.lbl_additional_opts.place_forget()  # Additional Bookmark Options label
-            self.check2.place_forget()  # Include Population checkbox
-            self.lbl5.place_forget()  # Title Separator label
-            self.entr4.place_forget()  # Title Separator entry
-
-            # Expand log field to use available space
-            # Move it up and increase height
-            self.txt1.place(x=40, y=200, width=525, height=300)
-
-        else:
-            # Show metadata controls
-            self.lbl3.place(x=40, y=150)
-            self.entr2.place(x=150, y=150, width=400, height=25)
-            self.btn2.place(x=580, y=150)
-
-            # Show TOC controls
-            self.locationBox.place(x=150, y=185)
-            self.lbl7.place(x=40, y=185)
-
-            # Show Bookmark frame and options
-            self.frm1.place(x=40, y=220, width=310, height=60)
-            self.lbl_additional_opts.place(x=45, y=225)
-            self.check2.place(x=45, y=240)
-            self.lbl5.place(x=170, y=240)
-            self.entr4.place(x=250, y=240, width=45, height=25)
-
-            # Shrink the log field
-            self.txt1.place(x=40, y=300, width=525, height=200)
+        for widget in (self.lbl3, self.entr2, self.btn2, self.locationBox, self.lbl7,
+                       self.frm1, self.lbl_additional_opts, self.check2, self.lbl5, self.entr4,
+                       self.final_run, self.btn_template):
+            widget.place_forget()
+        if self.toc_var.get() == 'use_meta':
+            self.lbl3.place(x=40, y=185)
+            self.entr2.place(x=150, y=185, width=400, height=25)
+            self.btn2.place(x=580, y=185)
+            self.btn_template.place(x=150, y=215, width=220, height=27)
+        self.txt1.place(x=40, y=250, width=525, height=190)
+        return
 
     def open_metadata_template(self):
         """Open the metadata template for editing"""
-        template_path = resource_path(os.path.join('examples', 'metadata_example.csv'))
+        template_path = resource_path(os.path.join('examples', 'metadata_simple.csv'))
         if not os.path.exists(template_path):
             messagebox.showerror("Error", "Metadata template not found!")
             return
 
         # Create user's template if it doesn't exist
-        user_template = os.path.join(self.CWD, 'metadata_template.csv')
+        user_template = os.path.join(self.entry_var1.get(), 'metadata_template_v2.csv')
         if not os.path.exists(user_template):
             shutil.copy2(template_path, user_template)
 

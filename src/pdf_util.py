@@ -18,6 +18,7 @@ import re
 import fitz
 
 import itertools
+import tempfile
 
 
 # pd.options.mode.chained_assignment = None  # default='warn'
@@ -28,13 +29,57 @@ class PDFUtility:
         CWD = self.gui.entry_var1.get()
         self.meta_source = {}
 
-    def combine_pdfs_simple(self, pdf_files, output_name, use_password=False, password=None):
-        """Combine PDFs without TOC or bookmarks"""
+    def convert_metadata_rtf(self, source_path, output_folder):
+        """Convert with an owned Word instance, refreshing cached PDFs each run."""
+        word = document = None
+        output = os.path.join(output_folder, os.path.splitext(os.path.basename(source_path))[0] + '.pdf')
+        self.gui.logger.warning(f'Converting RTF: {os.path.basename(source_path)}')
+        try:
+            with tempfile.TemporaryDirectory(dir=output_folder) as temporary:
+                converted = os.path.join(temporary, 'converted.pdf')
+                word = win32com.client.DispatchEx('Word.Application')
+                word.Visible = False
+                word.DisplayAlerts = 0
+                document = word.Documents.Open(os.path.abspath(source_path), ReadOnly=True,
+                                               AddToRecentFiles=False)
+                document.ExportAsFixedFormat(converted, 17)
+                document.Close(SaveChanges=0)
+                document = None
+                with fitz.open(converted) as pdf:
+                    if not len(pdf):
+                        raise ValueError('Word produced an empty PDF')
+                os.replace(converted, output)
+            return output
+        except Exception as error:
+            raise RuntimeError(f'RTF conversion failed: {os.path.basename(source_path)}. '
+                               f'Microsoft Word desktop is required. Details: {error}') from error
+        finally:
+            if document is not None:
+                try:
+                    document.Close(SaveChanges=0)
+                except Exception:
+                    pass
+            if word is not None:
+                try:
+                    word.Quit()
+                except Exception:
+                    pass
+
+    def combine_pdfs_simple(self, pdf_files, output_name, use_password=False, password=None,
+                            filename_bookmarks=False):
+        """Combine PDFs, optionally bookmarking each source by its filename."""
         try:
             with fitz.open() as result:
+                bookmarks = []
                 for pdf in pdf_files:
                     with fitz.open(pdf) as mfile:
+                        first_page = len(result) + 1
                         result.insert_pdf(mfile)
+                        if filename_bookmarks and len(mfile):
+                            bookmarks.append([1, os.path.basename(pdf), first_page])
+
+                if bookmarks:
+                    result.set_toc(bookmarks)
 
                 if use_password:
                     result.save(
@@ -118,7 +163,7 @@ class PDFUtility:
             None
         """
         self.gui.entry_var2.set(
-            os.path.normpath(askopenfilename(filetypes=[("Meta-data", "*.csv"), ("Meta-data", "*.sas7bdat")])))
+            os.path.normpath(askopenfilename(filetypes=[("CSV metadata", "*.csv"), ("Excel metadata", "*.xlsx")])))
         self.assign_meta()
 
     def assign_meta(self):

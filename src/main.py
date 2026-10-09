@@ -28,11 +28,11 @@ gui.link_btn_to_command(btn=gui.btn2, command=util.select_metadata)
 
 
 def execute_pdf_operations():
-    if gui.toc_var.get() == 'no_toc':
-        pc.combine_pdfs()  # This will now return early for no_toc
-    else:
+    try:
         pc.combine_pdfs()
-        pc.add_toc()
+    except Exception as error:
+        from tkinter import messagebox
+        messagebox.showerror('Merge failed', str(error))
 
 
 # Link BTN_GO from GUI with COMBINE_PDFs command from Action class.

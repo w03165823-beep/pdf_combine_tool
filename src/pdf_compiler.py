@@ -7,10 +7,12 @@ from fpdf import FPDF
 import os
 import shutil
 import sys
+import re
 
 from collections import namedtuple
 
 from src.gui import resource_path
+from src.toc_merge import metadata_entries, merge_with_toc
 
 sys.setrecursionlimit(1500000)
 
@@ -40,144 +42,31 @@ class PDFCompiler:
             self.util.mkdir(os.path.join(self.CWD, '_PDF'))
             self.pathToPDF = os.path.join(self.CWD, '_PDF')
 
-            if self.gui.toc_var.get() == 'no_toc':
+            if self.gui.toc_var.get() in ('no_toc', 'pdf_names'):
                 self._combine_without_toc()
                 # Early return to skip TOC setup
                 return
             else:
                 metadata_path = self.gui.entry_var2.get()
                 if not metadata_path or not os.path.exists(metadata_path):
-                    self.gui.logger.error('ERROR: Metadata file required for TOC generation')
-                    return
+                    raise ValueError('Select a Metadata CSV or XLSX file first')
 
-                tlfs, tlfs_count = self.util.get_tlf_list(metadata_path)
-                self._combine_with_toc(tlfs, tlfs_count)
+                output = os.path.join(self.CWD, self.gui.get_output_as())
+                entries = metadata_entries(metadata_path, self.CWD, output)
+                prepared, converted = [], {}
+                for path, title in entries:
+                    if path.lower().endswith('.rtf'):
+                        if path not in converted:
+                            converted[path] = self.util.convert_metadata_rtf(path, self.pathToPDF)
+                        path = converted[path]
+                    prepared.append((path, title))
+                self._merge_toc_entries(prepared, output)
+                return
 
         except Exception as e:
             self.gui.logger.error(f'ERROR: {str(e)}')
             raise
         finally:
-            self.gui.btn_go.configure(state='normal')
-
-        global font_folder, usage_font_c
-        usage_font_c = str(self.gui.box_value.get())[:-7]
-
-        self.gui.logger.warning('INFO: Selected font for TOC: ' + str(usage_font_c) + '.')
-        font_folder = resource_path(os.path.join('assets', 'fonts', str(usage_font_c) + '.ttf'))
-        self.CWD = self.gui.entry_var1.get()
-        self.pathToRTF = os.path.join(self.CWD)
-
-        # Get metadata path first
-        metadata_path = self.gui.entry_var2.get()
-        if not metadata_path or not os.path.exists(metadata_path):
-            self.gui.logger.error('ERROR: Metadata file not found or not selected')
-            self.gui.btn_go.configure(state='normal')
-            return
-
-        # Place ProgressBar onto main Frame before starting operations
-        self.gui.pb1.place(x=40, y=490, width=625, height=10)
-        self.gui.pb1['value'] = 0  # reset Progress Bar
-
-        # Use metadata_path instead of METADATA
-        tlfs, tlfs_count = self.util.get_tlf_list(metadata_path)
-        total_steps = (
-                1 +  # Initial setup
-                tlfs_count +  # PDF conversion
-                tlfs_count +  # Bookmark addition
-                1 +  # PDF combination
-                1  # Finalization
-        )
-        self.gui.pb1['maximum'] = total_steps
-        current_progress = 0
-
-        try:
-            # Initial setup
-            self.gui.OUTPUT_FILENAME = self.gui.get_output_as()
-            self.util.mkdir(os.path.join(self.CWD, '_PDF'))
-            self.pathToPDF = os.path.join(self.CWD, '_PDF')
-            self.out_file_txt = os.path.normpath(os.path.join(self.pathToPDF, 'toc_file.txt'))
-            self.pathToFile = str(self.pathToPDF)[:-4] + str(self.gui.OUTPUT_FILENAME)
-            self.outFilePdfToc = self.pathToFile[:-4] + '_with_TOC.pdf'
-            self.outFilePdf = os.path.normpath(os.path.join(self.pathToPDF, 'toc_file.pdf'))
-
-            # Cleanup any existing files
-            for file in [self.outFilePdf, os.path.normpath(os.path.join(self.pathToRTF, 'toc_file.pdf'))]:
-                try:
-                    os.remove(file)
-                except Exception:
-                    pass
-
-            current_progress += 1
-            self.gui.pb1['value'] = current_progress
-            self.gui.root.update()
-
-            # Get metadata
-            self.util.assign_meta()
-
-            # Convert RTFs to PDFs
-            if tlfs_count > 0:
-                for tlf in tlfs:
-                    self.util.convert_to_pdf(in_list=[tlf], rtf_folder_dir=self.CWD, pdf_folder_dir=self.pathToPDF)
-                    current_progress += 1
-                    self.gui.pb1['value'] = current_progress
-                    self.gui.root.update()
-
-                # Add bookmarks
-                self.gui.logger.warning('\nNow combining outputs into PDF...')
-                self.gui.logger.warning('\nSearching in ' + str(self.pathToPDF))
-
-                # Add bookmarks to each file
-                for _ in range(tlfs_count):
-                    self.util.add_bmk_to_file(
-                        input_dir=self.pathToPDF,
-                        meta_data_file=metadata_path,
-                        title_sep=self.gui.title_separator,
-                        add_popul=self.gui.add_population
-                    )
-                    current_progress += 1
-                    self.gui.pb1['value'] = current_progress
-                    self.gui.root.update()
-
-                # Combine PDFs
-                combined = self.util.go_combine_selected_pdf(
-                    dir=self.pathToPDF,
-                    meta_data_=metadata_path,
-                    out_name=self.gui.OUTPUT_FILENAME,
-                    prot_fl=False,
-                    title_sep=self.gui.title_separator,
-                    add_popul=self.gui.add_population
-                )
-
-                if combined:
-                    current_progress += 1
-                    self.gui.pb1['value'] = current_progress
-                    self.gui.root.update()
-
-                    # Only add TOC if files were actually combined
-                    self.add_toc()
-
-                pdfs_count = len([f for f in os.listdir(self.pathToPDF) if f.endswith('.pdf')])
-
-                self.gui.logger.warning(
-                    f'\nINFO: Job finished! {tlfs_count} files were processed and '
-                    f'{pdfs_count} were added to {self.gui.OUTPUT_FILENAME}')
-
-                if pdfs_count > 0:
-                    self.gui.logger.warning('\nINFO: ' + self.gui.OUTPUT_FILENAME + ' is saved in ' + str(os.getcwd()))
-
-                # Final progress update
-                self.gui.pb1['value'] = total_steps
-                self.gui.root.update()
-            else:
-                self.gui.logger.warning('WARNING: No files to concatenate. Check ' + str(self.pathToRTF) + '.')
-                self.gui.pb1['value'] = 0
-
-        except Exception as e:
-            self.gui.logger.error(f'ERROR: An error occurred: {str(e)}')
-            self.gui.pb1['value'] = 0
-            raise
-        finally:
-            # Re-enable the GO button regardless of success/failure
             self.gui.btn_go.configure(state='normal')
 
     def _combine_without_toc(self):
@@ -188,7 +77,13 @@ class PDFCompiler:
             self.gui.pb1['value'] = 0
 
             # Get all RTF files from main directory
-            rtf_files = [f for f in os.listdir(self.pathToRTF) if f.lower().endswith('.rtf')]
+            filenames_only = self.gui.toc_var.get() == 'pdf_names'
+            output_file = os.path.join(self.CWD, self.gui.get_output_as())
+            output_path = os.path.normcase(os.path.abspath(output_file))
+            rtf_files = [
+                f for f in os.listdir(self.pathToRTF)
+                if f.lower().endswith('.rtf') and os.path.isfile(os.path.join(self.pathToRTF, f))
+            ]
             pdf_files = set()  # Use a set to prevent duplicates
 
             # Calculate total steps for progress bar
@@ -201,7 +96,10 @@ class PDFCompiler:
                 self.gui.logger.warning(f'\nINFO: Found {len(rtf_files)} RTF files to convert')
                 for rtf in rtf_files:
                     self.gui.logger.warning(f'Converting {rtf} to PDF...')
-                    self.util.convert_to_pdf([rtf], self.pathToRTF, self.pathToPDF)
+                    if filenames_only:
+                        self.util.convert_metadata_rtf(os.path.join(self.pathToRTF, rtf), self.pathToPDF)
+                    else:
+                        self.util.convert_to_pdf([rtf], self.pathToRTF, self.pathToPDF)
                     # Only add the PDF from the _PDF directory
                     pdf_name = os.path.splitext(rtf)[0] + '.pdf'
                     pdf_files.add(os.path.join(self.pathToPDF, pdf_name))
@@ -212,9 +110,14 @@ class PDFCompiler:
             # Only add PDFs from the main directory that weren't created from RTFs
             for f in os.listdir(self.pathToRTF):
                 if f.lower().endswith('.pdf'):
+                    source_path = os.path.join(self.pathToRTF, f)
+                    if not os.path.isfile(source_path):
+                        continue
+                    if os.path.normcase(os.path.abspath(source_path)) == output_path:
+                        continue
                     # Check if this PDF wasn't created from an RTF
                     base_name = os.path.splitext(f)[0]
-                    if not any(os.path.splitext(rtf)[0] == base_name for rtf in rtf_files):
+                    if not any(os.path.splitext(rtf)[0].upper() == base_name.upper() for rtf in rtf_files):
                         pdf_files.add(os.path.join(self.pathToRTF, f))
 
             self.gui.logger.warning(f'INFO: Found {len(pdf_files)} unique PDF files')
@@ -223,11 +126,14 @@ class PDFCompiler:
             self.gui.root.update()
 
             if not pdf_files:
-                self.gui.logger.error('ERROR: No PDF or RTF files found to combine')
+                self.gui.logger.error('ERROR: No input files found to combine (output file excluded)')
                 return
 
             # Convert set to sorted list
-            pdf_files = sorted(pdf_files, key=lambda x: os.path.basename(x).lower())
+            if filenames_only:
+                pdf_files = sorted(pdf_files, key=self.filename_sort_key)
+            else:
+                pdf_files = sorted(pdf_files, key=lambda x: os.path.basename(x).lower())
 
             # Log files to be combined
             self.gui.logger.warning('\nFiles to be combined:')
@@ -235,15 +141,18 @@ class PDFCompiler:
                 self.gui.logger.warning(f'- {os.path.basename(pdf)}')
 
             # Combine PDFs
-            output_file = os.path.join(self.CWD, self.gui.get_output_as())
             self.gui.logger.warning('\nCombining PDFs...')
 
-            success = self.util.combine_pdfs_simple(
-                pdf_files,
-                output_file,
-                self.gui.pas_check_var.get(),
-                self.gui.entry_var5.get() if self.gui.pas_check_var.get() else None
-            )
+            if filenames_only:
+                self._merge_toc_entries([(p, os.path.basename(p)) for p in pdf_files], output_file)
+                success = True
+            else:
+                success = self.util.combine_pdfs_simple(
+                    pdf_files,
+                    output_file,
+                    self.gui.pas_check_var.get(),
+                    self.gui.entry_var5.get() if self.gui.pas_check_var.get() else None,
+                )
 
             if success:
                 self.gui.logger.warning(f'\nINFO: PDFs combined successfully into {output_file}')
@@ -261,6 +170,24 @@ class PDFCompiler:
             if not self.gui.pb1['value'] == self.gui.pb1['maximum']:
                 self.gui.pb1['value'] = 0
             self.gui.root.update()
+
+    def _merge_toc_entries(self, entries, output):
+        self.gui.logger.warning('Merge order:')
+        for path, title in entries:
+            self.gui.logger.warning(f'{os.path.basename(path)}: {title}')
+        password = self.gui.entry_var5.get() if self.gui.pas_check_var.get() else None
+        count = merge_with_toc(entries, output, password)
+        self.gui.logger.warning(f'Created {count} clickable TOC pages: {output}')
+
+    @staticmethod
+    def filename_sort_key(path):
+        """Sort numeric filename parts as numbers, with a stable name tie-breaker."""
+        name = os.path.basename(path)
+        parts = tuple(
+            (1, int(part)) if part.isdecimal() else (0, part)
+            for part in re.split(r'(\d+)', name.casefold())
+        )
+        return parts, name.casefold(), name
 
     def _combine_with_toc(self, tlfs, tlfs_count):
         """Existing TOC-based combination logic"""
