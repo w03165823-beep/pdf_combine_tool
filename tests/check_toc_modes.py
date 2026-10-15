@@ -46,7 +46,7 @@ def check():
                               entry_var5=Mock(), btn_go=Mock(), logger=Mock())
         PDFCompiler(gui, PDFUtility(gui)).combine_pdfs()
         with fitz.open(output) as doc:
-            assert doc.get_toc() == [[1, 'Table of Contents', 1], [1, rows[1][3], 2], [1, rows[0][3], 3]]
+            assert doc.get_toc() == [[1, '目录', 1], [1, rows[1][3], 2], [1, rows[0][3], 3]]
             assert [link['page'] for link in doc[0].get_links()] == [1, 2]
             assert doc[1].get_text().strip() == 'second.pdf'
         import pandas as pd
@@ -82,7 +82,7 @@ def check():
             assert word.Documents.Open.call_args.args[0] == str(root / (rtf_name + '.rtf'))
         assert (root / '_PDF' / (rtf_name + '.pdf')).exists()
         with fitz.open(output) as doc:
-            assert [row[1] for row in doc.get_toc()] == ['Table of Contents', 'PDF title', 'Forest title']
+            assert [row[1] for row in doc.get_toc()] == ['目录', 'PDF title', 'Forest title']
             assert doc[2].get_text().strip() == 'Converted RTF'
         with patch('src.pdf_util.win32com.client.DispatchEx', side_effect=RuntimeError('Word unavailable')):
             try:

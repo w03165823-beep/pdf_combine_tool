@@ -94,8 +94,8 @@ def merge_with_toc(entries, output_path, password=None):
         for _ in range(toc_count):
             page = result.new_page(width=595, height=842)
             page.insert_font(fontname='tocfont', fontbuffer=font.buffer)
-            page.insert_text((48, 48), 'Table of Contents', fontsize=20)
-        targets, bookmarks = [], [[1, 'Table of Contents', 1]]
+            page.insert_text((48, 48), '目录', fontsize=20, fontname='tocfont')
+        targets, bookmarks = [], [[1, '目录', 1]]
         for path, title in entries:
             with fitz.open(path) as source:
                 if not len(source):

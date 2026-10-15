@@ -46,11 +46,11 @@ def test_filename_mode_merges_in_numeric_order_and_excludes_output(tmp_path):
     compiler.combine_pdfs()  # Re-running must not append the previous result.
 
     with fitz.open(tmp_path / 'combined.pdf') as merged:
-        assert 'Table of Contents' in merged[0].get_text()
+        assert '目录' in merged[0].get_text()
         assert [page.get_text().strip() for page in list(merged)[1:]] == [
             '1.pdf', '2.PDF', 'second page', '10.pdf'
         ]
-        assert merged.get_toc() == [[1, 'Table of Contents', 1], [1, '1.pdf', 2], [1, '2.PDF', 3], [1, '10.pdf', 5]]
+        assert merged.get_toc() == [[1, '目录', 1], [1, '1.pdf', 2], [1, '2.PDF', 3], [1, '10.pdf', 5]]
         assert [link['page'] for link in merged[0].get_links()] == [1, 2, 4]
     util.convert_to_pdf.assert_not_called()
 
@@ -81,7 +81,7 @@ def test_filename_mode_converts_rtf_only_and_mixed_inputs(tmp_path):
     compiler = PDFCompiler(gui, util)
     compiler.combine_pdfs()
     with fitz.open(tmp_path / 'combined.pdf') as doc:
-        assert doc.get_toc() == [[1, 'Table of Contents', 1], [1, '2.pdf', 2], [1, '10.pdf', 3]]
+        assert doc.get_toc() == [[1, '目录', 1], [1, '2.pdf', 2], [1, '10.pdf', 3]]
         assert [link['page'] for link in doc[0].get_links()] == [1, 2]
     for name in ('1.pdf', '2.PDF'):
         with fitz.open() as doc:
@@ -91,7 +91,7 @@ def test_filename_mode_converts_rtf_only_and_mixed_inputs(tmp_path):
     compiler.combine_pdfs()
     with fitz.open(tmp_path / 'combined.pdf') as doc:
         assert len(doc) == 4  # Same-name RTF/PDF is included once; previous output excluded.
-        assert [row[1] for row in doc.get_toc()] == ['Table of Contents', '1.pdf', '2.pdf', '10.pdf']
+        assert [row[1] for row in doc.get_toc()] == ['目录', '1.pdf', '2.pdf', '10.pdf']
         assert doc[2].get_text().strip() == 'converted 2.RTF'
     assert util.convert_metadata_rtf.call_count == 4  # Both RTFs refreshed on each run.
     util.convert_to_pdf.assert_not_called()

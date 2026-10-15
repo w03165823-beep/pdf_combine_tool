@@ -314,7 +314,7 @@ class PDFCompiler:
 
         # insert the texts in pdf
         to_toc = pdf.add_link()
-        pdf.cell(0, h=0.2, txt="Table of Contents", border=0, ln=2, align='C', link=to_toc)
+        pdf.cell(0, h=0.2, txt="", border=0, ln=2, align='C', link=to_toc)
         pdf.set_link(to_toc, y=0.0, page=-1)
         pdf.set_font(usage_font, size=8)
 
@@ -351,12 +351,21 @@ class PDFCompiler:
                     pdf.add_page()
                     # save the pdf with name .pdf
             elif out_file_type == 'temp':
-                pdf.cell(0, h=0.2, txt="Table of Contents", border=0, ln=2, align='C')
+                pdf.cell(0, h=0.2, txt="", border=0, ln=2, align='C')
                 pdf.set_font(usage_font, size=8)
                 for x in f:
                     pdf.cell(0, h=0.2, txt=x, ln=1, align='L')
 
         pdf.output(out_file)
+        with fitz.open(out_file) as toc_doc:
+            page = toc_doc[0]
+            heading_font = fitz.Font('china-s')
+            page.insert_font(fontname='headingfont', fontbuffer=heading_font.buffer)
+            heading = '目录'
+            x = (page.rect.width - heading_font.text_length(heading, fontsize=9)) / 2
+            page.insert_text((x, 0.78 * 72 + 9), heading,
+                             fontsize=9, fontname='headingfont')
+            toc_doc.saveIncr()
 
     # Prepare TOC shell file
     def add_toc(self):
@@ -487,7 +496,7 @@ class PDFCompiler:
             if pdf == self.outFilePdf:
                 result.insert_pdf(mfile, from_page=0, to_page=toc_pdf_file_page_numb - 1, links=True,
                                   annots=True)
-                general_toc = [[1, 'Table of Contents', 1]]
+                general_toc = [[1, '目录', 1]]
             else:
                 result.insert_pdf(mfile, links=True, annots=True)
                 tmp_toc = mfile.get_toc(simple=False)
